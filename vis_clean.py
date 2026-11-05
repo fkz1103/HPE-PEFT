@@ -1,0 +1,155 @@
+import sys, os
+import numpy as np
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+import torch
+
+sys.path = [p for p in sys.path if 'hpenext' not in p]
+sys.path.insert(0, '.')
+
+from tools import builder
+from utils.config import get_config
+
+plt.rcParams.update({
+    'font.size': 1,
+    'figure.dpi': 300,
+    'savefig.dpi': 300,
+    'savefig.bbox': 'tight',
+    'savefig.pad_inches': 0,
+})
+
+PART_CMAP = plt.cm.tab20
+PART_CMAP2 = plt.cm.tab20b
+
+def get_part_color(part_id):
+    if part_id < 20:
+        return PART_CMAP(part_id / 20)
+    else:
+        return PART_CMAP2((part_id - 20) / 20)
+
+def render_pure_pointcloud(pts, labels, elev, azim, save_path, figsize=8):
+    """渲染纯点云图，无任何边框标签，最大化显示"""
+    fig = plt.figure(figsize=(figsize, figsize), frameon=False)
+    ax = fig.add_axes([0, 0, 1, 1], projection='3d')
+    # 
+    
+    colors = [get_part_color(int(l)) for l in labels]
+    ax.scatter(pts[:, 0], pts[:, 1], pts[:, 2],
+               c=colors, s=8, alpha=0.9, edgecolors='none', linewidth=0)
+    
+    ax.set_xticks([]); ax.set_yticks([]); ax.set_zticks([])
+    ax.grid(False)
+    ax.set_facecolor('white')
+    # 隐藏所有轴线、边框、背景
+    ax.xaxis.set_visible(False)
+    ax.yaxis.set_visible(False)
+    ax.zaxis.set_visible(False)
+    for axis in [ax.xaxis, ax.yaxis, ax.zaxis]:
+        axis.line.set_visible(False)
+        axis.pane.set_visible(False)
+        axis.pane.set_edgecolor('none')
+        axis.pane.set_alpha(0)
+    
+    ax.view_init(elev=elev, azim=azim)
+    mr = max(abs(pts).max(), 0.5)
+    ax.set_xlim(-mr, mr); ax.set_ylim(-mr, mr); ax.set_zlim(-mr, mr)
+    
+    fig.savefig(save_path, dpi=300, bbox_inches='tight', pad_inches=0, transparent=False)
+    plt.close()
+
+def main():
+    # ===== 加载两个模型 =====
+    class Args:
+        launcher = 'none'; local_rank = 0; test = True
+        use_gpu = torch.cuda.is_available(); distributed = False
+        num_workers = 4; seed = 0; deterministic = False; sync_bn = False
+        experiment_path = './experiments/vis_clean'; tfboard_path = './experiments/vis_clean/tfboard'
+        log_name = 'vis_clean'; val_freq = 1; vote = False; resume = False
+        finetune_model = False; scratch_model = False; mode = None
+        way = -1; shot = -1; fold = -1; start_ckpts = None; loss = 'cd1'
+
+    # 模型1: HPE-PEFT
+    args1 = Args()
+    args1.config = 'cfgs/shapenet_part_seg.yaml'
+    args1.ckpts = 'experiments/shapenet_part_seg/cfgs/peft_hpe_seg_perlayer/ckpt-best.pth'
+    config1 = get_config(args1, logger=None); config1.dataset.test.others.bs = 1
+    model_hpe = builder.model_builder(config1.model)
+    builder.load_model(model_hpe, args1.ckpts, logger=None)
+    model_hpe.cuda(); model_hpe.eval()
+
+    # 模型2: HPENet v2
+    args2 = Args()
+    args2.config = 'cfgs/shapenet_part_seg_ft.yaml'
+    args2.ckpts = 'experiments/shapenet_part_seg_ft/cfgs/shapenet_part_seg_ft/ckpt-best.pth'
+    config2 = get_config(args2, logger=None); config2.dataset.test.others.bs = 1
+    model_ft = builder.model_builder(config2.model)
+    builder.load_model(model_ft, args2.ckpts, logger=None)
+    model_ft.cuda(); model_ft.eval()
+
+    _, test_dataloader = builder.dataset_builder(args1, config1.dataset.test)
+
+    vis_categories = {
+        'Airplane': '02691156', 'Chair': '03001627', 'Guitar': '03467517',
+        'Lamp': '03636649', 'Laptop': '03642806', 'Motorbike': '03790512',
+        'Pistol': '03948459', 'Table': '04379243',
+    }
+
+    samples = {name: None for name in vis_categories}
+    npoints = config1.npoints
+    from pointnet2_ops import pointnet2_utils
+    torch.set_grad_enabled(False)
+
+    print("=== 推理两个模型 ===")
+    for idx, (taxonomy_ids, model_ids, data) in enumerate(test_dataloader):
+        points = data[0].cuda(); seg_label = data[1].cuda()
+        fps_idx = pointnet2_utils.furthest_point_sample(points, npoints).int()
+        points = pointnet2_utils.gather_operation(points.transpose(1, 2).contiguous(), fps_idx).transpose(1, 2).contiguous()
+        seg_label = torch.gather(seg_label, 1, fps_idx.long())
+        pred_hpe = model_hpe(points).argmax(dim=1)
+        pred_ft = model_ft(points).argmax(dim=1)
+        tax_id = taxonomy_ids[0] if isinstance(taxonomy_ids[0], str) else taxonomy_ids[0]
+        for cat_name, cat_id in vis_categories.items():
+            if tax_id == cat_id and samples[cat_name] is None:
+                samples[cat_name] = {
+                    'points': points[0].cpu().numpy(),
+                    'gt': seg_label[0].cpu().numpy(),
+                    'hpe': pred_hpe[0].cpu().numpy(),
+                    'ft': pred_ft[0].cpu().numpy(),
+                    'model_id': str(model_ids[0]),
+                }
+        if idx % 50 == 0: print(f"  Processed {idx}...")
+        if all(v is not None for v in samples.values()) and idx > 100:
+            print("  (done)"); break
+
+    # ===== 生成纯点云图 =====
+    out_dir = 'visualization/clean_pointclouds'
+    views = [
+        ('side', 30, 120),
+        ('front', 30, 30),
+        ('top', 15, 210),
+    ]
+    methods = [
+        ('gt', 'GroundTruth'),
+        ('ft', 'HPENet_v2'),
+        ('hpe', 'HPE_PEFT'),
+    ]
+
+    print("\n=== 生成纯净点云图 ===")
+    for cat_name, sample in samples.items():
+        if sample is None: continue
+        pts = sample['points']
+        for view_name, elev, azim in views:
+            for key, method_name in methods:
+                labels = sample[key]
+                fname = f'{out_dir}/{cat_name}/{cat_name}_{method_name}_{view_name}.png'
+                os.makedirs(os.path.dirname(fname), exist_ok=True)
+                render_pure_pointcloud(pts, labels, elev, azim, fname)
+        print(f"  ✓ {cat_name} (3 methods × 3 views = 9 images)")
+
+    print(f"\n✅ 全部完成！文件保存在 {out_dir}/ 下")
+    print(f"   每个类别一个子文件夹，共 {len(samples)}×9 = {len(samples)*9} 张图")
+
+if __name__ == '__main__':
+    main()

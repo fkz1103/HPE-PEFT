@@ -1,0 +1,16 @@
+run,rows,last_epoch,best_miou,final_miou,trainable_K,log
+s3dis_seg_fullft,151,150,0.6902,0.6803,,20260821_221438.log
+s3dis_seg_fullft_pt,151,150,0.6902,0.6803,,20260821_221438.log
+s3dis_seg_hpe,151,150,0.4911,0.4897,,20260816_200947.log
+s3dis_seg_hpe_pt,151,150,0.6251,0.6209,,20260817_110036.log
+shapenet_part_seg,151,150,0.8772,0.8772,,20260726_002451.log
+shapenet_part_seg_adapter,151,150,0.8137,0.8126,,20260827_040254.log
+shapenet_part_seg_adapter_quick,3,2,0.3313,0.3313,,20260826_144126.log
+shapenet_part_seg_ft,151,150,0.8998,0.8998,,20260726_094027.log
+shapenet_part_seg_lora,151,150,0.7842,0.7842,,20260826_150546.log
+shapenet_part_seg_lora_quick,3,2,0.2241,0.2241,,20260826_142516.log
+shapenet_part_seg_pointlora,151,150,0.8047,0.794,,20260910_191000.log
+shapenet_part_seg_pointpeft,151,150,0.8017,0.7985,,20260911_111112.log
+shapenet_part_seg_prompt,151,150,0.8036,0.8036,,20260827_211846.log
+shapenet_part_seg_prompt_quick,4,3,0.4459,0.4459,,20260826_135955.log
+shapenet_part_seg_shared,151,150,0.8109,0.8098,,20260804_141853.log

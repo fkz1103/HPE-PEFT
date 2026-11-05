@@ -1,0 +1,10 @@
+NAME: ShapeNetPart
+DATA_PATH: data/shapenetcore_partanno_segmentation_benchmark_v0
+N_POINTS: 2048
+NUM_CLASSES: 50
+TRAIN:
+    subset: train
+VAL:
+    subset: val
+TEST:
+    subset: test

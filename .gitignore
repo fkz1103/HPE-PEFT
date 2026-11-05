@@ -1,0 +1,39 @@
+# ---------- data & weights ----------
+data/
+experiments/
+pretrained/
+ckpts/
+*.pth
+*.pt
+*.ckpt
+*.tar.gz
+*.zip
+
+# ---------- build artifacts ----------
+build/
+dist/
+*.egg-info/
+*.so
+*.pyd
+*.o
+*.a
+extensions/**/build/
+
+# ---------- python ----------
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+*.egg
+
+# ---------- logs ----------
+*.log
+runs/
+wandb/
+tb_logs/
+tensorboard/
+
+# ---------- editors / OS ----------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

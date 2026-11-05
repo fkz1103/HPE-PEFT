@@ -1,0 +1,4 @@
+NAME: S3DIS
+DATA_PATH: /root/autodl-tmp/indoor3d_sem_seg_hdf5_data
+N_POINTS: 2048
+NUM_CLASSES: 13

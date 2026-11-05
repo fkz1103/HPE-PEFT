@@ -1,0 +1,21 @@
+# Tested with Python 3.10, CUDA 11.8, PyTorch 2.x, single RTX 4080 Super (16 GB)
+torch>=2.0.0
+torchvision>=0.15.0
+timm                # 0.4.5 is the pin used by the original Point-MAE; newer versions usually work
+numpy
+scipy
+h5py
+easydict
+termcolor
+tqdm
+pyyaml
+matplotlib
+opencv-python
+pandas
+plyfile
+open3d>=0.17.0
+transforms3d
+tensorboardX
+
+# NOTE: pointnet2_ops / chamfer_dist / knn are compiled from extensions/,
+# not from PyPI. See README.md -> Installation.

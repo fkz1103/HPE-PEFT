@@ -1,0 +1,84 @@
+import os
+import json
+import numpy as np
+import torch
+from torch.utils.data import Dataset
+from .build import DATASETS
+from easydict import EasyDict
+
+@DATASETS.register_module()
+class ShapeNetPart(Dataset):
+    def __init__(self, config):
+        super().__init__()
+        # build_dataset_from_cfg 会将 default_args 合并到配置根节点，
+        # 因此 subset 通常位于 config.subset。
+        # 同时兼容旧版嵌套配置 config.others.subset。
+        if hasattr(config, 'subset'):
+            self.subset = config.subset
+        elif hasattr(config, 'others') and hasattr(config.others, 'subset'):
+            self.subset = config.others.subset
+        else:
+            self.subset = 'train'
+        self.npoints = getattr(config, 'N_POINTS', 2048)
+        self.data_root = getattr(config, 'DATA_PATH', '')
+        if not self.data_root:
+            self.data_root = getattr(config, 'ROOT', '')
+
+        split_map = {'train': 'shuffled_train_file_list.json',
+                     'val': 'shuffled_val_file_list.json',
+                     'test': 'shuffled_test_file_list.json'}
+        split_file = os.path.join(self.data_root, 'train_test_split', split_map[self.subset])
+        with open(split_file, 'r') as f:
+            file_paths = json.load(f)
+
+        self.data_list = []
+        for path in file_paths:
+            parts = path.strip().split('/')
+            cat_id = parts[1] if len(parts) >= 2 else parts[0]
+            file_id = parts[2] if len(parts) >= 3 else parts[1]
+            self.data_list.append((cat_id, file_id))
+
+        map_path = os.path.join(self.data_root, 'shapenet_part_overallid_to_catid_partid.json')
+        with open(map_path, 'r') as f:
+            catid_partid_list = json.load(f)
+
+        self.cat_local_to_global = {}
+        for global_id, (cid, local_part_id) in enumerate(catid_partid_list):
+            key = (cid, local_part_id - 1)
+            self.cat_local_to_global[key] = global_id
+
+        print(f'[ShapeNetPart] {self.subset}: {len(self.data_list)} samples')
+
+    def __len__(self):
+        return len(self.data_list)
+
+    def __getitem__(self, idx):
+        cat_id, file_id = self.data_list[idx]
+
+        pts_path = os.path.join(self.data_root, cat_id, 'points', f'{file_id}.pts')
+        points = np.loadtxt(pts_path, dtype=np.float32)
+
+        seg_path = os.path.join(self.data_root, cat_id, 'points_label', f'{file_id}.seg')
+        seg_local = np.loadtxt(seg_path, dtype=np.int64).flatten()
+
+        seg_global = np.array([self.cat_local_to_global.get((cat_id, s), 0)
+                               for s in seg_local], dtype=np.int64)
+
+        if len(points) >= self.npoints:
+            choice = np.random.choice(len(points), self.npoints, replace=False)
+        else:
+            choice = np.random.choice(len(points), self.npoints, replace=True)
+
+        points = points[choice]
+        seg_global = seg_global[choice]
+
+        centroid = np.mean(points, axis=0)
+        points = points - centroid
+        max_dist = np.max(np.sqrt(np.sum(points**2, axis=1)))
+        if max_dist > 1e-8:
+            points = points / max_dist
+
+        points = torch.from_numpy(points)
+        seg_global = torch.from_numpy(seg_global)
+
+        return cat_id, file_id, (points, seg_global)
