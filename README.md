@@ -10,9 +10,7 @@ Official implementation of
 Submitted to *Pattern Recognition* (Virtual Special Issue: *Adaptive and Scalable
 Vision Models in Dynamic and Resource-Constrained Environments*).
 
-<p align="center">
-  <img src="assets/s3dis_vis.png" width="85%">
-</p>
+
 
 [![Code](https://img.shields.io/badge/Code-GitHub-181717?logo=github)](https://github.com/fkz1103/HPE-PEFT)
 [![Checkpoints](https://img.shields.io/badge/Checkpoints-Hugging%20Face-FFD21E?logo=huggingface)](https://huggingface.co/fkz1103/HPE-PEFT-ckpts)
